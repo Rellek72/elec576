@@ -2,7 +2,6 @@ __author__ = 'tan_nguyen'
 import numpy as np
 from sklearn import datasets, linear_model
 import matplotlib.pyplot as plt
-import math
 
 def generate_data():
     '''
@@ -118,11 +117,24 @@ class NeuralNetwork(object):
         self.z1 = np.matmul(X, self.W1) + self.b1
         self.a1 = actFun(self.z1)
         self.z2 = np.matmul(self.a1, self.W2) + self.b2
-        
-        shifted = self.z2 - np.max(self.z2)
-        e_z2 = np.exp(shifted)
-        self.probs = e_z2 / np.sum(e_z2)
-        if 0 in self.probs:
+        sm = 2
+        if sm == 0:
+            self.e_z2 = np.exp(self.z2)
+            self.probs = self.e_z2 / np.sum(self.e_z2)
+        elif sm == 1:
+            self.z2_s = self.z2 - np.max(self.z2)
+            self.e_z2 = np.exp(self.z2_s)
+            self.probs = self.e_z2 / np.sum(self.e_z2)
+        elif sm == 2:
+            self.z2_s = self.z2 - np.asarray([np.maximum(self.z2.T[0], self.z2.T[1]), np.maximum(self.z2.T[0], self.z2.T[1])]).T
+            #print(self.z2_s.shape)
+            #print(self.z2_s)
+            #print(np.maximum(self.z2[0], self.z2[1]).shape)
+            #print(np.maximum(self.z2.T[0], self.z2.T[1]))
+            #a = 1/0
+            self.e_z2 = np.exp(self.z2_s)
+            self.probs = self.e_z2 / np.sum(self.e_z2)
+        if False: #0 in self.probs:
             print("ZERO ENTERING LOG!!!")
             print(np.where(self.probs==0))
             print("probs probs probs probs probs probs ")
@@ -130,7 +142,7 @@ class NeuralNetwork(object):
             print("e_z2 e_z2e_z2e_z2e_z2e_z2e_z2e_z2e_z2")
             print(e_z2[5])
             print("normed normed normed normed normed")
-            print(shifted[5])
+            print(self.z2_s[5])
             print("z2 z2 z2 z2 z2 z2 z2 z2 z2 z2 z2 z2 ")
             print(self.z2[5])
             print("a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 ")
@@ -140,7 +152,6 @@ class NeuralNetwork(object):
             print("max: ")
             print(np.max(self.z2))
 
-            a = 1/0
 
         return None
 
@@ -155,19 +166,39 @@ class NeuralNetwork(object):
 
         self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
 
+        #loss =
+
         data_loss = 0.0
         for i in range(N):
             for j in range(len(y)):
-                SAFE = False
+                SAFE = True
                 if SAFE:
                     delta = y[j][i]*np.log(self.probs[i][j])
                 else:
-                    delta = y[j][i]*(self.z2[i][j] - np.log(np.sum(self.z2[j])))
-                if self.printit:
+                    #lsi = self.z2[i][j] - np.log(np.sum(np.exp(self.z2[i])))
+
+                    #lsi = self.z2_s[i][j] - np.log(np.sum(np.exp(self.z2_s[i])))
+                    lsi = self.z2_s[i][j] - np.log(np.sum(self.e_z2[i]))
+
+
+                    delta = y[j][i] * lsi
+                    #delta = y[j][i]*(self.z2[i][j] - np.log(np.sum(np.exp(self.z2[i] - np.amax(self.z2) ))))
+                if False: #self.printit:
                     print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+                    print("i, j: ", i, ", ", j)
+                    print("lsi: ", lsi)
                     print("delta: ", delta)
                     print("Prob: ", self.probs[i][j])
-                    print("i, j: ", i, ", ", j)
+                    print("z2: ", self.z2.shape)
+                    print(self.z2[i])
+                    print("z2_s: ", self.z2_s.shape)
+                    print(self.z2_s[i])
+                    print("z2_max: ", np.amax(self.z2))
+                    print("numerator: ", np.exp(self.z2[i]))
+                    print("denom: ", np.exp(np.amax(self.z2)))
+                    print("denom2: ", np.exp(np.amax(740)))
+                    asdf = 1 / 0
+
                 data_loss += delta
 
         data_loss = -1 * data_loss
@@ -219,10 +250,10 @@ class NeuralNetwork(object):
                 db1 += dLdb1
                 dW1 += dLdW1
 
-        dW1 = (-1 / N) * dW1
-        dW2 = (-1 / N) * dW2
-        db1 = (-1 / N) * db1
-        db2 = (-1 / N) * db2
+        dW1 = (1 / N) * dW1
+        dW2 = (1 / N) * dW2
+        db1 = (1 / N) * db1
+        db2 = (1 / N) * db2
 
         return dW1, dW2, db1, db2
 
@@ -243,7 +274,7 @@ class NeuralNetwork(object):
         print("numpasses: ", num_passes)
         self.printit = False
         for i in range(0, num_passes):
-            if i == 164:
+            if i == 170:
                 self.printit = True
             # Forward propagation
             self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
@@ -263,8 +294,8 @@ class NeuralNetwork(object):
 
             # Optionally print the loss.
             # This is expensive because it uses the whole dataset, so we don't want to do it too often.
-#            if print_loss and i % 1000 == 0:
-            print("Loss after iteration %i: %f" % (i, self.calculate_loss(X, y_hot)))
+            if print_loss and i % 1000 == 0:
+                print("Loss after iteration %i: %f" % (i, self.calculate_loss(X, y_hot)))
 
     def visualize_decision_boundary(self, X, y):
         '''
@@ -279,7 +310,7 @@ def main():
      # generate and visualize Make-Moons dataset
      X, y = generate_data()
 
-     model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=3, nn_output_dim=2, actFun_type='relu')
+     model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=3, nn_output_dim=2, actFun_type='sigmoid')
      model.fit_model(X,y)
      model.visualize_decision_boundary(X,y)
 
