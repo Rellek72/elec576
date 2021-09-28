@@ -157,8 +157,12 @@ class NeuralNetwork(object):
 
         data_loss = 0.0
         for i in range(N):
-            for j in [0, 1]:
-                delta = y[j][i]*np.log(self.probs[i][j])
+            for j in range(len(y)):
+                SAFE = False
+                if SAFE:
+                    delta = y[j][i]*np.log(self.probs[i][j])
+                else:
+                    delta = y[j][i]*(self.z2[i][j] - np.log(np.sum(self.z2[j])))
                 if self.printit:
                     print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
                     print("delta: ", delta)
