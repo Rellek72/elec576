@@ -118,21 +118,19 @@ class NeuralNetwork(object):
         self.z1 = np.matmul(X, self.W1) + self.b1
         self.a1 = actFun(self.z1)
         self.z2 = np.matmul(self.a1, self.W2) + self.b2
-        mid = self.z2 - np.max(self.z2)
-        e_z2 = np.exp(mid)
-        #if self.printit:
-#            print("ezzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz2")
-#            print(e_z2)
+        
+        shifted = self.z2 - np.max(self.z2)
+        e_z2 = np.exp(shifted)
         self.probs = e_z2 / np.sum(e_z2)
         if 0 in self.probs:
-            print("YEAH THATS FUCKED")
+            print("ZERO ENTERING LOG!!!")
             print(np.where(self.probs==0))
             print("probs probs probs probs probs probs ")
             print(self.probs[5])
             print("e_z2 e_z2e_z2e_z2e_z2e_z2e_z2e_z2e_z2")
             print(e_z2[5])
             print("normed normed normed normed normed")
-            print(mid[5])
+            print(shifted[5])
             print("z2 z2 z2 z2 z2 z2 z2 z2 z2 z2 z2 z2 ")
             print(self.z2[5])
             print("a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 ")
@@ -143,8 +141,6 @@ class NeuralNetwork(object):
             print(np.max(self.z2))
 
             a = 1/0
-#        if self.printit:
-#            print(self.probs[0])
 
         return None
 
