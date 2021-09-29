@@ -44,7 +44,7 @@ class DeepNeuralNetwork(object):
     """
     This class builds and trains a neural network
     """
-    def __init__(self, nn_layers, nn_layer_sizes, actFun_type='tanh', reg_lambda=0.01, seed=0):
+    def __init__(self, nn_layers, nn_input_dim, nn_layer_dims, actFun_type='tanh', reg_lambda=0.01, seed=0):
         '''
         :param nn_layers: the number of layers, not counting input layer
         :param nn_layer_sizes: the dimensions of each layer
@@ -55,42 +55,27 @@ class DeepNeuralNetwork(object):
 
         if nn_layers <= 0:
             raise ValueError("Invalid amount of layers: must be >= 2")
-        if nn_hidden_layer_size <= 0:
-            raise ValueError("Invalid layer size: must be > 0")
+        self.nn_layers = nn_layers
 
-        self.nn_input_dim = nn_input_dim
-        if len(nn_hidden_dims) != ((nn_layers-2) * nn_hidden_layer_size) or any(i <= 0 for i in nn_hidden_dims):
-            raise ValueError("Invalid hidden_dims: must be list of ints > 0 for all hidden layers")
-        self.nn_hidden_dims = nn_hidden_dims
+        if any(i <= 0 for i in nn_layer_dims) or len(nn_layer_dims) != nn_layers:
+            raise ValueError("Invalid layer size: all must be > 0 and length == nn_layers")
+        self.nn_layer_dims = [nn_input_dim] + nn_layer_dims
 
-        self.nn_output_dim = nn_output_dim
         self.reg_lambda = reg_lambda
-        if (actFun_types is None) or (len(actFun_types) != len(nn_hidden_dims)+1):
-            print("Invalid actFun_types: must be a list of actFuns for all layers and sublayers except output--Defaulting to all tanh.")
-            actFun_types = (len(nn_hidden_dims)+1) * ['tanh']
-        self.actFun_types = actFun_types
+
+        if actFun_type not in ['tanh', 'sigmoid', 'relu']:
+            raise ValueError("Invalid activation function. Valid inputs are \"tanh\", \"sigmoid\", or \"relu\"Y")
+        self.actFun_type = actFun_type
 
         # initialize the weights and biases in the network
         np.random.seed(seed)
-
-        # Create and instantiate input layer
-        self.layers = [Layer(np.random.randn(self.nn_input_dim, self.nn_hidden_dims[0]) / np.sqrt(self.nn_input_dim),
-                             np.zeros((1, self.nn_hidden_dims[0])),
-                             actFun_types[0])]
-
-        # Create and instantiate all hidden layers
-        for i in range(len(nn_hidden_dims)-1):
-            self.layers += [Layer(np.random.randn(self.nn_hidden_dims[i], self.nn_hidden_dims[i+1]) / np.sqrt(self.nn_hidden_dims[i]),
-                                  np.zeros((1, self.nn_hidden_dims[i+1])),
-                                  actFun_types[1+i])]
-
-        # Create and instantiate output layer
-        self.layers += [Layer(np.random.randn(self.nn_hidden_dims[-1], self.nn_output_dim) / np.sqrt(self.nn_hidden_dims[-1]),
-                              np.zeros((1, self.nn_output_dim)),
-                              "softmax")]
-
-        print(len(nn_hidden_dims))
-        print(self.layers)
+        self.layers = []
+        print("DIMS: ", self.nn_layer_dims)
+        # Create and instantiate all layers
+        for i in range(self.nn_layers):
+            self.layers += [Layer(np.random.randn(self.nn_layer_dims[i], self.nn_layer_dims[i+1]) / np.sqrt(self.nn_layer_dims[i]),
+                                  np.zeros((1, self.nn_layer_dims[i+1])),
+                                  i)]
 
 
     def actFun(self, z, type):
@@ -102,20 +87,13 @@ class DeepNeuralNetwork(object):
         '''
 
         if type == 'tanh':
-            print("tanh")
             return np.tanh(z)
         elif type == 'sigmoid':
             return 1/(1 + np.exp(-1*z))
         elif type == "relu":
             return np.maximum(0.0, z)
-        elif type == "softmax":
-            # NOTE: Softmax can only be used by final layer
-            print("soft")
-            e_z2s = np.exp(z - np.expand_dims(z.max(axis=1), axis=1))
-            self.denom = np.sum(e_z2s, axis=1, keepdims=True)
-            return e_z2s / self.denom
         else:
-            raise ValueError("Invalid activation function. Valid inputs are \"tanh\", \"sigmoid\", \"relu\", or \"softmax\" for the final layer ONLY")
+            return z
 
     def diff_actFun(self, z, type):
         '''
@@ -131,10 +109,8 @@ class DeepNeuralNetwork(object):
             return sig*(1-sig)
         elif type == "relu":
             return (z > 0) * 1.0
-        elif type == "softmax":
-            return self.probs - z.T
         else:
-            raise ValueError("Invalid activation function. Valid inputs are \"tanh\", \"sigmoid\", \"relu\", or \"softmax\" for the final layer ONLY")
+            return 1
 
     def feedforward(self, X):
         '''
@@ -146,13 +122,12 @@ class DeepNeuralNetwork(object):
         '''
 
         for i in range(len(self.layers)):
-            self.layers[i].feedforward(X, lambda x: self.actFun(x, type=self.actFun_types[i]))
+            self.layers[i].feedforward(X, lambda x: self.actFun(x, self.actFun_type), i)
             X = self.layers[i].z
 
-#        for layer in self.layers[:-1]:
-#            print(layer.actFun)
-#            layer.feedforward(X, actFun)
-#            X = layer.z
+        e_zs = np.exp(X - np.expand_dims(X.max(axis=1), axis=1))
+        self.denom = np.sum(e_zs, axis=1, keepdims=True)
+        self.probs = e_zs / self.denom
 
         return None
 
@@ -164,10 +139,8 @@ class DeepNeuralNetwork(object):
         :return: the loss for prediction
         '''
 
-        self.feedforward(X)
-
         log_sm = self.layers[-1].z - np.log(self.denom)
-        loss =  y * log_sm.T
+        loss = y * log_sm.T
         data_loss = np.sum(loss)
 
         # Add regulatization term to loss (optional)
@@ -194,18 +167,24 @@ class DeepNeuralNetwork(object):
         :return: dL/dW1, dL/b1, dL/dW2, dL/db2
         '''
 
+        dz = self.probs - y.T
+        W = self.layers[-1].weights
+
         dWs = []
         dbs = []
-        dz = self.diff_actFun(y, "softmax")
-        W = self.layers[-1:].weights
 
-        for layer in self.layers.reverse()[1:]:
-            dz, dW, db = layer.backprop(dz, W)
+
+        fn_type = 'N/A'
+        top = True
+        for layer in (self.layers[::-1]):
+            dz, dW, db = layer.backprop(dz, W, lambda x: self.diff_actFun(x, type=fn_type), top)
             dWs += [dW]
             dbs += [db]
             W = layer.weights
+            fn_type = self.actFun_type
+            top = False
 
-        return dWs.reverse(), dbs.reverse()
+        return dWs[::-1], dbs[::-1]
 
     def fit_model(self, X, y, epsilon=0.01, num_passes=20000, print_loss=True):
         '''
@@ -219,7 +198,6 @@ class DeepNeuralNetwork(object):
         # Gradient descent.
 
         y = np.asarray([1-y, y])
-        self.printit = False
         for i in range(0, num_passes):
 
             # Forward propagation
@@ -230,6 +208,13 @@ class DeepNeuralNetwork(object):
             dWs, dbs = self.backprop(X, y)
 
             # Add derivatives of regularization terms (biases don't have regularization terms)
+            for i in range(len(dWs)):
+                print("dw", i, ": ", dWs[i].shape)
+                print("W", i, ":  ", self.layers[i].weights.shape)
+
+
+
+            a = 1/0
             for j in range(len(dWs)):
                 dWs[j] += self.reg_lambda * self.layers[j].weights
 
@@ -256,7 +241,7 @@ class Layer(object):
     """
     This class defines and execute the feedforward and backprop operations for a single layer
     """
-    def __init__(self, weights, bias, actFunType):
+    def __init__(self, weights, bias, id):
         '''
         :param nn_layers: the number of layers, not counting input layer
         :param nn_layer_size: the size of each layer
@@ -270,29 +255,42 @@ class Layer(object):
 
         self.weights = weights
         self.bias = bias
-        self.actFunType = actFunType
+        self.id = id
         self.z = None
         self.a = None
 
-    def feedforward(self, X, actFun):
+    def feedforward(self, X, actFun, layer):
         '''
         feedforward part of the layer
         :param X: input data
         :return:
         '''
-
+        #print("FF ", self.id)
+        #print("W: ", self.weights.shape)
+        #print("b: ", self.bias.shape)
         self.z = np.matmul(X, self.weights) + self.bias
         self.a = actFun(self.z)
+        #print("z: ", self.z.shape)
+        #print("a: ", self.a.shape)
         return None
 
-    def backprop(self, dz_pp, W_pp, diff_actFun):
+    def backprop(self, dz_pp, W_pp, diff_actFun, top):
         '''
         backprop run backpropagation to compute the gradients used to update the parameters in the backward step
         :param dZpp: the derivative for the output of the previous layer
         :return: dL/dz,dL/dW, dL/db
         '''
-
-        dz = np.matmul(dz_pp, W_pp.T) * diff_actFun(self.z)
+        print("-------------------")
+        print("BP ", self.id)
+        print("Z: ", self.z.shape)
+        print("a: ", self.a.shape)
+        print()
+        print("DZ: ", dz_pp.shape)
+#        print("Wpp: ", W_pp.shape)
+        if top:
+            dz = dz_pp
+        else:
+            dz = np.matmul(dz_pp, W_pp.T) * diff_actFun(self.z)
         dW = np.matmul(self.a.T, dz)
         db = np.sum(dz, axis=0, keepdims=True)
 
@@ -304,8 +302,7 @@ def main():
     X, y = generate_data()
     #plt.scatter(X[:, 0], X[:, 1], s=40, c=y, cmap=plt.cm.Spectral)
     #plt.show()
-
-    model = DeepNeuralNetwork(nn_layers=3, nn_hidden_layer_size=3, nn_input_dim=2, nn_hidden_dims=[6, 6, 6], nn_output_dim=2, actFun_types=['tanh', 'tanh', 'tanh', 'tanh'])
+    model = DeepNeuralNetwork(nn_layers=5, nn_input_dim=2, nn_layer_dims=[3,9,7,4,2], actFun_type='tanh')
     model.fit_model(X, y)
     model.visualize_decision_boundary(X, y)
 

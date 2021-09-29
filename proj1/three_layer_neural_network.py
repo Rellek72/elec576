@@ -120,6 +120,8 @@ class NeuralNetwork(object):
         self.probs = self.e_z2s / self.z_sum
 
 
+
+
         return None
 
     def calculate_loss(self, X, y):
@@ -164,6 +166,26 @@ class NeuralNetwork(object):
         dz1 = (np.matmul(dz2, self.W2.T) * self.diff_actFun(self.z1, self.actFun_type))
         db1 = np.sum(dz1, axis=0, keepdims=True)
         dW1 = np.matmul(X.T, dz1)
+
+        print("dz2: ", dz2.shape)
+        print("probs: ", self.probs.shape, "   y: ", y.shape)
+        print()
+        print("db2: ", db2.shape)
+        print()
+        print("dW2: ", dW2.shape)
+        print("a1: ", self.a1.shape, "    z2: ", self.z2.shape)
+        print()
+        print("dz1: ", dz1.shape)
+        print("dz2: ", dz2.shape, "   W2: ", self.W2.shape, "   da1: ", self.diff_actFun(self.z1, self.actFun_type).shape)
+
+        print("db1: ", db1.shape)
+        print("dW1: ", dW1.shape)
+        a = 1/0
+
+        print("z1: ", self.z1.shape)
+        print("a1: ", self.a1.shape)
+        print("z2: ", self.z2.shape)
+        a = 1/0
 
         return dW1, dW2, db1, db2
 
