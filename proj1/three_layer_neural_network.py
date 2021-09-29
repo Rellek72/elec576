@@ -83,8 +83,6 @@ class NeuralNetwork(object):
         else:
             raise ValueError("Invalid activation function. Valid inputs are \"tanh\", \"sigmoid\", or \"relu\"")
 
-        return None
-
     def diff_actFun(self, z, type):
         '''
         diff_actFun compute the derivatives of the activation functions wrt the net input
@@ -102,8 +100,6 @@ class NeuralNetwork(object):
         else:
             raise ValueError("Invalid activation function. Valid inputs are \"tanh\", \"sigmoid\", or \"relu\"")
 
-        return None
-
     def feedforward(self, X, actFun):
         '''
         feedforward builds a 3-layer neural network and computes the two probabilities,
@@ -117,34 +113,13 @@ class NeuralNetwork(object):
         self.z1 = np.matmul(X, self.W1) + self.b1
         self.a1 = actFun(self.z1)
         self.z2 = np.matmul(self.a1, self.W2) + self.b2
+        #self.z2s = self.z2 - np.reshape(np.maximum(self.z2.T[0], self.z2.T[1]), [len(X), 1])
+        self.z2s = self.z2 - np.expand_dims(self.z2.max(axis=1), axis=1)
+        self.e_z2s = np.exp(self.z2s)
+        self.z_sum = np.sum(self.e_z2s, axis=1, keepdims=True)
+        self.probs = self.e_z2s / self.z_sum
 
 
-        sm = 25
-
-        if sm == 0:
-            e_z2 = np.exp(self.z2)
-            self.probs = e_z2 / np.sum(e_z2, axis=1, keepdims=True)
-        elif sm == 1 or sm == 2:
-            if sm == 1:
-                self.z_max = np.max(self.z2)
-                self.z2_s = self.z2 - self.z_max
-            else:
-                self.z_max = np.reshape(np.maximum(self.z2.T[0], self.z2.T[1]).T, [len(X), 1])
-                self.z2s = self.z2 - self.z_max
-            self.e_z2s = np.exp(self.z2s)
-            self.e_z2 = np.exp(self.z2)
-            self.probs = self.e_z2s / np.sum(self.e_z2s, axis=1, keepdims=True)
-        elif sm == 3:
-            mid = self.z2 - np.max(self.z2)
-            e_z2 = np.exp(mid)
-            self.probs = e_z2 / np.sum(e_z2, axis=1, keepdims=True)
-        else:
-            self.z_max = np.reshape(np.maximum(self.z2.T[0], self.z2.T[1]), [len(X), 1])
-            self.z2s = self.z2 - self.z_max
-            self.e_z2s = np.exp(self.z2s)
-            self.e_z2 = np.exp(self.z2)
-            self.z_sum = np.sum(self.e_z2s, axis=1, keepdims=True)
-            self.probs = self.e_z2s / self.z_sum
         return None
 
     def calculate_loss(self, X, y):
@@ -158,33 +133,9 @@ class NeuralNetwork(object):
 
         self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
 
-        mode = 12
-        if mode == 0:
-            log_sm = np.log(self.probs)
-            loss = y * log_sm.T
-            data_loss = -1 * np.sum(loss)
-        elif mode == 1:
-            #if self.printit:
-                #print(np.exp(self.z_max))
-            log_sm = self.z2s - self.z_max - np.log(np.sum(self.e_z2s, axis=1, keepdims=True))
-            #print(log_sm)
-            loss = y * log_sm.T
-            data_loss = -1 * np.sum(loss)
-        elif mode == 2:
-            log_sm = self.z2s - np.reshape(np.log(self.z_max / np.sum(self.e_z2, axis=1)), [N, 1])
-            loss = y * log_sm.T
-        elif mode == 3:
-            data_loss = 0.0
-            for i in range(N):
-                for j in [0, 1]:
-                    delta = y[j][i] * np.log(self.probs[i][j])
-                    data_loss += delta
-            data_loss = -1 * data_loss
-        else:
-            log_sm = self.z2 - np.log(self.z_sum)
-            loss = y * log_sm.T
-            data_loss = np.sum(loss)
-
+        log_sm = self.z2 - np.log(self.z_sum)
+        loss = y * log_sm.T
+        data_loss = np.sum(loss)
 
         # Add regulatization term to loss (optional)
         data_loss += self.reg_lambda / 2 * (np.sum(np.square(self.W1)) + np.sum(np.square(self.W2)))
@@ -206,42 +157,13 @@ class NeuralNetwork(object):
         :param y: given labels
         :return: dL/dW1, dL/b1, dL/dW2, dL/db2
         '''
-        N = len(X)
-        coef = -1 / N
-        coef = 1
 
         dz2 = self.probs - y.T
-
-        mode = 0
-        if (mode == 0):
-            db2 = coef * np.sum(dz2, axis=0, keepdims=True)
-            dW2 = coef * np.matmul(self.a1.T, dz2)
-            dz1 = (np.matmul(dz2, self.W2.T) * self.diff_actFun(self.z1, self.actFun_type))
-            db1 = coef * np.sum(dz1, axis=0, keepdims=True)
-            dW1 = coef * np.matmul(X.T, dz1)
-        elif mode == 1:
-            a_prime = self.diff_actFun(self.z1, self.actFun_type)
-            db2 = None
-            for i in range(N):
-                dLdW2 = np.matmul(np.reshape(self.a1[i], [3, 1]), np.reshape(dz2[i], [1, 2]))
-                dLdb1 = np.matmul(np.reshape(dz2[i], [1, 2]), self.W2.T) * a_prime[0]
-                dLdW1 = np.matmul(np.reshape(X[i], [2, 1]), dLdb1)
-
-                if db2 is None:
-                    db2 = np.reshape(dz2[i], [1, 2])
-                    dW2 = dLdW2
-                    db1 = dLdb1
-                    dW1 = dLdW1
-                else:
-                    db2 += dz2[i]
-                    dW2 += dLdW2
-                    db1 += dLdb1
-                    dW1 += dLdW1
-
-            dW1 = coef * dW1
-            dW2 = coef * dW2
-            db1 = coef * db1
-            db2 = coef * db2
+        db2 = np.sum(dz2, axis=0, keepdims=True)
+        dW2 = np.matmul(self.a1.T, dz2)
+        dz1 = (np.matmul(dz2, self.W2.T) * self.diff_actFun(self.z1, self.actFun_type))
+        db1 = np.sum(dz1, axis=0, keepdims=True)
+        dW1 = np.matmul(X.T, dz1)
 
         return dW1, dW2, db1, db2
 
@@ -260,8 +182,6 @@ class NeuralNetwork(object):
         y_hot = np.asarray([1-y, y])
         self.printit = False
         for i in range(0, num_passes):
-            if i == 174:
-                self.printit = True
             # Forward propagation
             self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
             self.calculate_loss(X, y_hot)
@@ -298,7 +218,7 @@ def main():
      #plt.scatter(X[:, 0], X[:, 1], s=40, c=y, cmap=plt.cm.Spectral)
      #plt.show()
 
-     model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=3, nn_output_dim=2, actFun_type='relu')
+     model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=6, nn_output_dim=2, actFun_type='tanh')
      model.fit_model(X, y)
      model.visualize_decision_boundary(X, y)
 
