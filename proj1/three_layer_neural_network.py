@@ -90,6 +90,7 @@ class NeuralNetwork(object):
         :param type: Tanh, Sigmoid, or ReLU
         :return: the derivatives of the activation functions wrt the net input
         '''
+
         if type == 'tanh':
             return 1/np.cosh(2*z)
         elif type == 'sigmoid':
@@ -108,19 +109,14 @@ class NeuralNetwork(object):
         :param actFun: activation function
         :return:
         '''
-        X = np.asarray(X)
 
         self.z1 = np.matmul(X, self.W1) + self.b1
         self.a1 = actFun(self.z1)
         self.z2 = np.matmul(self.a1, self.W2) + self.b2
-        #self.z2s = self.z2 - np.reshape(np.maximum(self.z2.T[0], self.z2.T[1]), [len(X), 1])
         self.z2s = self.z2 - np.expand_dims(self.z2.max(axis=1), axis=1)
         self.e_z2s = np.exp(self.z2s)
         self.z_sum = np.sum(self.e_z2s, axis=1, keepdims=True)
         self.probs = self.e_z2s / self.z_sum
-
-
-
 
         return None
 
@@ -131,7 +127,6 @@ class NeuralNetwork(object):
         :param y: given labels
         :return: the loss for prediction
         '''
-        N = len(X)
 
         self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
 
@@ -141,7 +136,7 @@ class NeuralNetwork(object):
 
         # Add regulatization term to loss (optional)
         data_loss += self.reg_lambda / 2 * (np.sum(np.square(self.W1)) + np.sum(np.square(self.W2)))
-        return (1. / N) * data_loss
+        return (1. / len(X)) * data_loss
 
     def predict(self, X):
         '''
@@ -167,26 +162,6 @@ class NeuralNetwork(object):
         db1 = np.sum(dz1, axis=0, keepdims=True)
         dW1 = np.matmul(X.T, dz1)
 
-        print("dz2: ", dz2.shape)
-        print("probs: ", self.probs.shape, "   y: ", y.shape)
-        print()
-        print("db2: ", db2.shape)
-        print()
-        print("dW2: ", dW2.shape)
-        print("a1: ", self.a1.shape, "    z2: ", self.z2.shape)
-        print()
-        print("dz1: ", dz1.shape)
-        print("dz2: ", dz2.shape, "   W2: ", self.W2.shape, "   da1: ", self.diff_actFun(self.z1, self.actFun_type).shape)
-
-        print("db1: ", db1.shape)
-        print("dW1: ", dW1.shape)
-        a = 1/0
-
-        print("z1: ", self.z1.shape)
-        print("a1: ", self.a1.shape)
-        print("z2: ", self.z2.shape)
-        a = 1/0
-
         return dW1, dW2, db1, db2
 
     def fit_model(self, X, y, epsilon=0.01, num_passes=20000, print_loss=True):
@@ -200,15 +175,14 @@ class NeuralNetwork(object):
         '''
         # Gradient descent.
 
-        y = np.asarray(y)
-        y_hot = np.asarray([1-y, y])
+        y = np.asarray([1-y, y])
         self.printit = False
         for i in range(0, num_passes):
             # Forward propagation
             self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
-            self.calculate_loss(X, y_hot)
+            self.calculate_loss(X, y)
             # Backpropagation
-            dW1, dW2, db1, db2 = self.backprop(X, y_hot)
+            dW1, dW2, db1, db2 = self.backprop(X, y)
 
             # Add derivatives of regularization terms (b1 and b2 don't have regularization terms)
             dW2 += self.reg_lambda * self.W2
@@ -223,7 +197,7 @@ class NeuralNetwork(object):
             # Optionally print the loss.
             # This is expensive because it uses the whole dataset, so we don't want to do it too often.
             if print_loss and i % 1000 == 0:
-                print("Loss after iteration %i: %f" % (i, self.calculate_loss(X, y_hot)))
+                print("Loss after iteration %i: %f" % (i, self.calculate_loss(X, y)))
 
     def visualize_decision_boundary(self, X, y):
         '''
